@@ -1,55 +1,41 @@
 import asyncio
 import os
-import re
 from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.types import Message, FSInputFile
 import yt_dlp
 
 TOKEN = "8615110980:AAHl1YLkvZ1Z8qUr45uI3dMwx-lR0lKVp1E"
 dp = Dispatcher()
 
-# Yuklash sozlamalari (Crashed bo'lmasligi uchun xavfsiz qilib yozildi)
-def get_ydl_opts(is_audio=False):
-    return {
-        "format": "bestaudio/best" if is_audio else "best[ext=mp4]/best",
-        "quiet": True,
-        "nocheckcertificate": True,
-        "outtmpl": "downloads/temp.%(ext)s",
-        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+async def download_video(url):
+    # Video uchun eng oddiy sozlamalar
+    ydl_opts = {
+        "format": "best[ext=mp4]/best",
+        "outtmpl": "downloads/video.mp4",
+        "quiet": True
     }
-
-async def download_media(query, is_audio=False):
-    ydl_opts = get_ydl_opts(is_audio)
-    ydl_opts["default_search"] = "ytsearch1:"
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query} official audio", download=True)
-            return info['entries'][0] if 'entries' in info else None
-    except Exception as e:
-        print(f"Download Error: {e}")
+            ydl.download([url])
+            return "downloads/video.mp4"
+    except:
         return None
 
-@dp.message(F.text == "/start")
-async def start(msg: Message):
-    await msg.reply("Salom! Qo'shiq nomini yozing:")
-
-@dp.message(F.text)
-async def handle_text(msg: Message):
-    wait = await msg.reply("⏳ Qidirilmoqda...")
-    info = await download_media(msg.text, is_audio=True)
-    if info:
-        path = f"downloads/temp.{info.get('ext', 'mp3')}"
-        await msg.reply_audio(audio=FSInputFile(path), title=info.get('title', 'Audio'), caption="@Mucis_Saved_bot")
-        os.remove(path)
-        await wait.delete()
+@dp.message(F.text.startswith("http"))
+async def handle_url(msg: Message):
+    wait_msg = await msg.reply("⏳ Yuklanmoqda...")
+    file_path = await download_video(msg.text)
+    
+    if file_path and os.path.exists(file_path):
+        await msg.reply_video(video=FSInputFile(file_path))
+        os.remove(file_path)
+        await wait_msg.delete()
     else:
-        await wait.edit_text("❌ Topilmadi, boshqa nom bilan urinib ko'ring.")
+        await wait_msg.edit_text("❌ Yuklashda xatolik yuz berdi.")
 
 async def main():
     if not os.path.exists('downloads'): os.makedirs('downloads')
-    bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(token=TOKEN)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
